@@ -114,27 +114,33 @@ func sortEntriesDesc(entries []FeedEntry) {
 // buildFeed assembles an RSS 2.0 feed from the given entries.
 // Does not mutate the caller's slice.
 func buildFeed(cfg Config, entries []FeedEntry, now time.Time) (string, error) {
-	sorted := make([]FeedEntry, len(entries))
-	copy(sorted, entries)
+	sorted := slices.Clone(entries)
 	sortEntriesDesc(sorted)
 	if cfg.MaxItems > 0 && len(sorted) > cfg.MaxItems {
 		sorted = sorted[:cfg.MaxItems]
 	}
 
-	baseURL := strings.TrimRight(cfg.BaseURL, "/")
+	channelLink, err := url.JoinPath(cfg.BaseURL, "/")
+	if err != nil {
+		return "", fmt.Errorf("invalid base URL: %w", err)
+	}
 	feed := &feeds.Feed{
 		Title:       cfg.Title,
-		Link:        &feeds.Link{Href: baseURL + "/"},
+		Link:        &feeds.Link{Href: channelLink},
 		Description: cfg.Description,
 		Created:     now,
 	}
+	feed.Items = make([]*feeds.Item, 0, len(sorted))
 
 	for _, e := range sorted {
 		t, err := time.Parse(time.RFC3339, e.Meta.Date)
 		if err != nil {
 			t = now
 		}
-		link := baseURL + "/" + strings.TrimLeft(e.RelativePath, "/")
+		link, err := url.JoinPath(cfg.BaseURL, e.RelativePath)
+		if err != nil {
+			return "", fmt.Errorf("invalid base URL: %w", err)
+		}
 		item := &feeds.Item{
 			Title:       itemTitle(e.Meta),
 			Link:        &feeds.Link{Href: link},

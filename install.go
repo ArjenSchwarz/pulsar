@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -98,7 +99,7 @@ func newInstallCmd() *cobra.Command {
 				Label:      launchAgentLabel,
 				BinaryPath: binary,
 				BaseURL:    baseURL,
-				Port:       fmt.Sprintf("%d", port),
+				Port:       strconv.Itoa(port),
 				Dir:        cfg.Dir,
 				LogPath:    logPath,
 			}

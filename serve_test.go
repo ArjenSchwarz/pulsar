@@ -99,10 +99,8 @@ func TestServe_PathTraversalRejected(t *testing.T) {
 	srv := httptest.NewServer(newServeHandler(cfg))
 	defer srv.Close()
 
-	// http.Client cleans paths, so build the request manually.
-	req, _ := http.NewRequest("GET", srv.URL+"/", nil)
-	req.URL.Opaque = "//" + req.URL.Host + "/..%2Fsecret.txt"
-	// Easier: just probe ".." in the path via raw URL parsing.
+	// http.Client cleans path components, so use a URL-encoded segment to
+	// confirm the server itself rejects the traversal attempt.
 	resp, err := http.Get(srv.URL + "/..%2Fsecret.txt")
 	if err != nil {
 		t.Fatalf("get: %v", err)

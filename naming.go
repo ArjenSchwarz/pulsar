@@ -8,10 +8,7 @@ import (
 	"strings"
 )
 
-var (
-	sshRepoRE = regexp.MustCompile(`^([^@]+)@([^:]+):(.+)$`)
-	nonAlnum  = regexp.MustCompile(`[^a-z0-9]+`)
-)
+var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
 
 // normalizeRepoURL converts SSH or HTTP repo URLs to canonical HTTPS form
 // without a trailing .git or slash. Returns an error if the URL has no host
@@ -19,12 +16,14 @@ var (
 func normalizeRepoURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", fmt.Errorf("repoUrl is empty")
+		return "", fmt.Errorf("missing required field 'repoUrl' in metadata")
 	}
 
-	// SSH form: git@host:path → https://host/path
-	if m := sshRepoRE.FindStringSubmatch(raw); m != nil {
-		raw = "https://" + m[2] + "/" + m[3]
+	// SSH form: user@host:path → https://host/path
+	if user, rest, ok := strings.Cut(raw, "@"); ok && user != "" && !strings.ContainsAny(user, "/:") {
+		if host, path, ok := strings.Cut(rest, ":"); ok && host != "" && path != "" {
+			raw = "https://" + host + "/" + path
+		}
 	}
 
 	u, err := url.Parse(raw)
@@ -54,12 +53,8 @@ func hostLabel(repoURL string) string {
 	if err != nil {
 		return ""
 	}
-	host := u.Hostname()
-	if host == "" {
-		return ""
-	}
-	parts := strings.SplitN(host, ".", 2)
-	return strings.ToLower(parts[0])
+	label, _, _ := strings.Cut(u.Hostname(), ".")
+	return strings.ToLower(label)
 }
 
 // repoName returns the last path component of repoURL.

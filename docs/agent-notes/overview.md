@@ -20,7 +20,7 @@ Tests live in the same package (`package main`). Helpers shared across tests:
 - `intPtr(int) *int` (in `metadata_test.go`).
 - `writeReviewHTML(t, dir, name, metaJSON)` (in `publish_test.go`) — used by `serve_test.go` to build fixtures.
 
-`go test ./...` runs everything; coverage is ~52% overall, higher on the pure-function code.
+`go test ./...` runs everything; coverage is around 50% overall, higher on the pure-function code (`naming`, `metadata`, `feed`) and lower on the command flows.
 
 ## Gotchas
 

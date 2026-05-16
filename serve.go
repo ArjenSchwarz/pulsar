@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -79,9 +80,16 @@ func newServeCmd() *cobra.Command {
 
 // newServeHandler returns the HTTP handler for pulsar serve.
 func newServeHandler(cfg Config) http.Handler {
+	// Resolve the archive path once at handler construction so each request
+	// avoids a redundant filesystem syscall.
+	absArchive, err := filepath.Abs(cfg.Dir)
+	if err != nil {
+		absArchive = cfg.Dir
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, r *http.Request) {
-		entries, err := scanArchive(cfg.Dir)
+		entries, err := scanArchive(absArchive)
 		if err != nil {
 			log.Printf("pulsar: scan archive: %v", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -99,7 +107,7 @@ func newServeHandler(cfg Config) http.Handler {
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
-			entries, err := scanArchive(cfg.Dir)
+			entries, err := scanArchive(absArchive)
 			if err != nil {
 				log.Printf("pulsar: scan archive: %v", err)
 				http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -108,7 +116,7 @@ func newServeHandler(cfg Config) http.Handler {
 			writeIndex(w, cfg, entries)
 			return
 		}
-		serveArchiveFile(w, r, cfg.Dir)
+		serveArchiveFile(w, r, absArchive)
 	})
 
 	return loggingMiddleware(mux)
@@ -123,7 +131,8 @@ func loggingMiddleware(next http.Handler) http.Handler {
 }
 
 // serveArchiveFile serves files from the archive directory with traversal protection.
-func serveArchiveFile(w http.ResponseWriter, r *http.Request, archive string) {
+// absArchive must be a cleaned absolute path.
+func serveArchiveFile(w http.ResponseWriter, r *http.Request, absArchive string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -133,28 +142,20 @@ func serveArchiveFile(w http.ResponseWriter, r *http.Request, archive string) {
 		http.NotFound(w, r)
 		return
 	}
-	if strings.Contains(rel, "..") {
+	// filepath.IsLocal rejects absolute paths, paths escaping via "..",
+	// and (on Windows) reserved names.
+	if !filepath.IsLocal(rel) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	absArchive, err := filepath.Abs(archive)
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	target := filepath.Join(absArchive, filepath.Clean(rel))
-	relCheck, err := filepath.Rel(absArchive, target)
-	if err != nil || relCheck == ".." || strings.HasPrefix(relCheck, ".."+string(filepath.Separator)) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
+	target := filepath.Join(absArchive, rel)
+	// Refuse symlinks: an attacker who plants one in the archive could
+	// otherwise read arbitrary files.
 	info, err := os.Lstat(target)
 	if err != nil || info.IsDir() {
 		http.NotFound(w, r)
 		return
 	}
-	// Refuse symlinks: an attacker who plants one in the archive could
-	// otherwise read arbitrary files.
 	if info.Mode()&os.ModeSymlink != 0 {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
@@ -163,13 +164,10 @@ func serveArchiveFile(w http.ResponseWriter, r *http.Request, archive string) {
 }
 
 // scanArchive walks the archive directory and returns all entries with valid metadata.
-func scanArchive(archive string) ([]FeedEntry, error) {
-	absArchive, err := filepath.Abs(archive)
-	if err != nil {
-		return nil, err
-	}
+// absArchive must be a cleaned absolute path.
+func scanArchive(absArchive string) ([]FeedEntry, error) {
 	var entries []FeedEntry
-	err = filepath.WalkDir(absArchive, func(path string, d os.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(absArchive, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			if os.IsNotExist(walkErr) && path == absArchive {
 				return nil
@@ -221,9 +219,7 @@ func writeIndex(w http.ResponseWriter, cfg Config, entries []FeedEntry) {
 <ul>
 `, html.EscapeString(cfg.Title), html.EscapeString(cfg.Title))
 
-	// Sort newest-first by reusing buildFeed's ordering: build a temporary slice.
-	sorted := make([]FeedEntry, len(entries))
-	copy(sorted, entries)
+	sorted := slices.Clone(entries)
 	sortEntriesDesc(sorted)
 	for _, e := range sorted {
 		fmt.Fprintf(&b, `<li><a href="/%s">%s</a></li>`, html.EscapeString(e.RelativePath), html.EscapeString(itemTitle(e.Meta)))
