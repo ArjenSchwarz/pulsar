@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -28,8 +29,12 @@ func newServeCmd() *cobra.Command {
 			if cfg.BaseURL == "" {
 				return errors.New("--base-url is required (or set PULSAR_BASE_URL)")
 			}
-			if _, err := url.Parse(cfg.BaseURL); err != nil {
+			parsed, err := url.Parse(cfg.BaseURL)
+			if err != nil {
 				return fmt.Errorf("invalid --base-url: %w", err)
+			}
+			if parsed.Scheme == "" || parsed.Host == "" {
+				return fmt.Errorf("invalid --base-url: missing scheme or host in %q", cfg.BaseURL)
 			}
 
 			handler := newServeHandler(cfg)
@@ -89,7 +94,7 @@ func newServeHandler(cfg Config) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
-		w.Write([]byte(out))
+		_, _ = io.WriteString(w, out)
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -128,26 +133,30 @@ func serveArchiveFile(w http.ResponseWriter, r *http.Request, archive string) {
 		http.NotFound(w, r)
 		return
 	}
-	// Reject any traversal attempt before resolving.
 	if strings.Contains(rel, "..") {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	clean := filepath.Clean(rel)
 	absArchive, err := filepath.Abs(archive)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	target := filepath.Join(absArchive, clean)
-	// Confirm the resolved path stays inside the archive directory.
-	if !strings.HasPrefix(target, absArchive+string(filepath.Separator)) && target != absArchive {
+	target := filepath.Join(absArchive, filepath.Clean(rel))
+	relCheck, err := filepath.Rel(absArchive, target)
+	if err != nil || relCheck == ".." || strings.HasPrefix(relCheck, ".."+string(filepath.Separator)) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	info, err := os.Stat(target)
+	info, err := os.Lstat(target)
 	if err != nil || info.IsDir() {
 		http.NotFound(w, r)
+		return
+	}
+	// Refuse symlinks: an attacker who plants one in the archive could
+	// otherwise read arbitrary files.
+	if info.Mode()&os.ModeSymlink != 0 {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	http.ServeFile(w, r, target)
@@ -220,14 +229,5 @@ func writeIndex(w http.ResponseWriter, cfg Config, entries []FeedEntry) {
 		fmt.Fprintf(&b, `<li><a href="/%s">%s</a></li>`, html.EscapeString(e.RelativePath), html.EscapeString(itemTitle(e.Meta)))
 	}
 	b.WriteString("</ul></body></html>")
-	w.Write([]byte(b.String()))
-}
-
-func sortEntriesDesc(entries []FeedEntry) {
-	// Simple insertion sort: list is small in practice; avoids importing sort here twice.
-	for i := 1; i < len(entries); i++ {
-		for j := i; j > 0 && entries[j].Meta.Date > entries[j-1].Meta.Date; j-- {
-			entries[j], entries[j-1] = entries[j-1], entries[j]
-		}
-	}
+	_, _ = io.WriteString(w, b.String())
 }

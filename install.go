@@ -83,7 +83,9 @@ func newInstallCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("resolving binary path: %w", err)
 			}
-			binary, _ = filepath.EvalSymlinks(binary)
+			if resolved, err := filepath.EvalSymlinks(binary); err == nil {
+				binary = resolved
+			}
 
 			home, err := os.UserHomeDir()
 			if err != nil {
@@ -163,15 +165,15 @@ func newUninstallCmd() *cobra.Command {
 	}
 }
 
-// suggestBaseURL queries `tailscale status --json` for the device's tailnet FQDN.
-// Returns "" if tailscale is not installed or the hostname can't be determined.
+// suggestBaseURL parses the human-readable output of `tailscale status` to
+// guess the device's tailnet FQDN. Returns "" if tailscale isn't installed
+// or no `.ts.net` host appears in the output.
 func suggestBaseURL() string {
 	out, err := exec.Command("tailscale", "status", "--self=true", "--peers=false").Output()
 	if err != nil {
 		return ""
 	}
-	// The first non-empty field of the first line is the device's tailnet name.
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

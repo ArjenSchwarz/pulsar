@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -28,12 +30,29 @@ const (
 	keyMaxItems    = "max_items"
 )
 
+// mustBindEnv panics on bind error so a typo in an env var name fails fast at startup.
+func mustBindEnv(key string, envVar string) {
+	if err := viper.BindEnv(key, envVar); err != nil {
+		panic(fmt.Sprintf("pulsar: bind env %s: %v", envVar, err))
+	}
+}
+
+// mustBindPFlag panics on bind error so a typo in a flag name fails fast at startup.
+func mustBindPFlag(key string, flag *pflag.Flag) {
+	if flag == nil {
+		panic(fmt.Sprintf("pulsar: bind flag %q: flag not registered", key))
+	}
+	if err := viper.BindPFlag(key, flag); err != nil {
+		panic(fmt.Sprintf("pulsar: bind flag %q: %v", key, err))
+	}
+}
+
 // initViper wires environment variables and the optional config file into viper.
 func initViper() {
 	viper.SetEnvPrefix("PULSAR")
 	viper.AutomaticEnv()
-	viper.BindEnv(keyBaseURL, "PULSAR_BASE_URL")
-	viper.BindEnv(keyMaxItems, "PULSAR_MAX_ITEMS")
+	mustBindEnv(keyBaseURL, "PULSAR_BASE_URL")
+	mustBindEnv(keyMaxItems, "PULSAR_MAX_ITEMS")
 
 	home, err := os.UserHomeDir()
 	if err == nil {
@@ -42,22 +61,22 @@ func initViper() {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
-	viper.SetDefault(keyDir, defaultDir())
+	viper.SetDefault(keyDir, defaultDir(home))
 	viper.SetDefault(keyPort, 8765)
 	viper.SetDefault(keyTitle, "Code Reviews")
 	viper.SetDefault(keyDescription, "Locally generated code reviews")
 	viper.SetDefault(keyMaxItems, 200)
 
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		var notFound viper.ConfigFileNotFoundError
+		if !errors.As(err, &notFound) {
 			fmt.Fprintf(os.Stderr, "pulsar: warning: failed to read config file: %v\n", err)
 		}
 	}
 }
 
-func defaultDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
+func defaultDir(home string) string {
+	if home == "" {
 		return "CodeReviews"
 	}
 	return filepath.Join(home, "CodeReviews")
@@ -66,7 +85,7 @@ func defaultDir() string {
 // bindCommonFlags registers flags shared by both subcommands.
 func bindCommonFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String("dir", "", "archive directory (default: $HOME/CodeReviews)")
-	viper.BindPFlag(keyDir, cmd.PersistentFlags().Lookup("dir"))
+	mustBindPFlag(keyDir, cmd.PersistentFlags().Lookup("dir"))
 }
 
 // bindServeFlags registers flags only used by the serve subcommand.
@@ -77,11 +96,11 @@ func bindServeFlags(cmd *cobra.Command) {
 	cmd.Flags().String("description", "", "RSS channel description")
 	cmd.Flags().Int("max-items", 0, "maximum number of items in the feed")
 
-	viper.BindPFlag(keyPort, cmd.Flags().Lookup("port"))
-	viper.BindPFlag(keyBaseURL, cmd.Flags().Lookup("base-url"))
-	viper.BindPFlag(keyTitle, cmd.Flags().Lookup("title"))
-	viper.BindPFlag(keyDescription, cmd.Flags().Lookup("description"))
-	viper.BindPFlag(keyMaxItems, cmd.Flags().Lookup("max-items"))
+	mustBindPFlag(keyPort, cmd.Flags().Lookup("port"))
+	mustBindPFlag(keyBaseURL, cmd.Flags().Lookup("base-url"))
+	mustBindPFlag(keyTitle, cmd.Flags().Lookup("title"))
+	mustBindPFlag(keyDescription, cmd.Flags().Lookup("description"))
+	mustBindPFlag(keyMaxItems, cmd.Flags().Lookup("max-items"))
 }
 
 // loadConfig returns the resolved configuration.

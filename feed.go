@@ -1,10 +1,11 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"html"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -102,14 +103,22 @@ func itemGUID(m Metadata) string {
 	return branchGUID(m.RepoURL, m.Branch, ts)
 }
 
-// buildFeed assembles an RSS 2.0 feed from the given entries.
-// entries are sorted in descending date order and truncated to maxItems.
-func buildFeed(cfg Config, entries []FeedEntry, now time.Time) (string, error) {
-	sort.SliceStable(entries, func(i, j int) bool {
-		return entries[i].Meta.Date > entries[j].Meta.Date
+// sortEntriesDesc orders entries newest-first by Metadata.Date.
+// Operates in place; callers that don't own the slice should copy first.
+func sortEntriesDesc(entries []FeedEntry) {
+	slices.SortStableFunc(entries, func(a, b FeedEntry) int {
+		return cmp.Compare(b.Meta.Date, a.Meta.Date)
 	})
-	if cfg.MaxItems > 0 && len(entries) > cfg.MaxItems {
-		entries = entries[:cfg.MaxItems]
+}
+
+// buildFeed assembles an RSS 2.0 feed from the given entries.
+// Does not mutate the caller's slice.
+func buildFeed(cfg Config, entries []FeedEntry, now time.Time) (string, error) {
+	sorted := make([]FeedEntry, len(entries))
+	copy(sorted, entries)
+	sortEntriesDesc(sorted)
+	if cfg.MaxItems > 0 && len(sorted) > cfg.MaxItems {
+		sorted = sorted[:cfg.MaxItems]
 	}
 
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
@@ -120,7 +129,7 @@ func buildFeed(cfg Config, entries []FeedEntry, now time.Time) (string, error) {
 		Created:     now,
 	}
 
-	for _, e := range entries {
+	for _, e := range sorted {
 		t, err := time.Parse(time.RFC3339, e.Meta.Date)
 		if err != nil {
 			t = now
@@ -138,16 +147,17 @@ func buildFeed(cfg Config, entries []FeedEntry, now time.Time) (string, error) {
 
 	rss := (&feeds.Rss{Feed: feed}).RssFeed()
 	rss.Generator = "pulsar"
+	rss.LastBuildDate = now.Format(time.RFC1123Z)
 	return feeds.ToXML(&rssFeedXML{RssFeed: rss})
 }
 
-// rssFeedXML wraps RssFeed so the XmlFeed interface (FeedXml) is satisfied
-// without going through gorilla/feeds' RSS converter again — we want the
-// Generator field we just set to survive.
+// rssFeedXML lets us emit the RssFeed we built (with Generator and
+// LastBuildDate populated) without re-running gorilla/feeds' RSS converter,
+// which would discard those fields.
 type rssFeedXML struct {
 	*feeds.RssFeed
 }
 
-func (r *rssFeedXML) FeedXml() interface{} {
+func (r *rssFeedXML) FeedXml() any {
 	return r.RssFeed.FeedXml()
 }
