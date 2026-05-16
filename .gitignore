@@ -1,0 +1,17 @@
+# Built binary
+/pulsar
+
+# Go test/build artefacts
+*.test
+*.out
+coverage.*
+vendor/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local config
+/config.yaml
