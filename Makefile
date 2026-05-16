@@ -90,7 +90,7 @@ clean:
 
 # Install the application
 install:
-	go install .
+	go install -ldflags "$(LDFLAGS)" .
 
 # Clean up go.mod and go.sum
 deps-tidy:
