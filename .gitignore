@@ -15,3 +15,6 @@ vendor/
 
 # Local config
 /config.yaml
+
+# Local Claude artefacts (review HTML, etc.)
+/.claude/
