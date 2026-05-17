@@ -1,19 +1,20 @@
 # Pulsar Makefile
 # Provides standard targets for common development tasks
 
-# Version information
+# Version information. BUILD_TIME and GIT_COMMIT are deferred so that targets
+# which never reference LDFLAGS (help, fmt, vet, test, ...) skip the shell calls.
 VERSION ?= dev
-BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME = $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+GIT_COMMIT = $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 # Build flags for version injection (vars are no-ops until declared in main)
-LDFLAGS := -X main.Version=$(VERSION) \
-           -X main.BuildTime=$(BUILD_TIME) \
-           -X main.GitCommit=$(GIT_COMMIT)
+LDFLAGS = -X main.Version=$(VERSION) \
+          -X main.BuildTime=$(BUILD_TIME) \
+          -X main.GitCommit=$(GIT_COMMIT)
 
 # Build the Pulsar application
 build:
-	go build -ldflags "$(LDFLAGS)" .
+	go build -ldflags "$(LDFLAGS)" -o pulsar .
 
 # Build the Pulsar application with version information
 build-release:
@@ -64,19 +65,9 @@ fmt:
 vet:
 	go vet ./...
 
-# Run linter (requires golangci-lint v2+)
+# Run linter. .golangci.yml declares version: "2" — golangci-lint itself
+# fails loudly if a v1 binary is on PATH or if the binary is missing.
 lint:
-	@if ! command -v golangci-lint >/dev/null 2>&1; then \
-		echo "Error: golangci-lint is not installed."; \
-		echo "Install v2: https://golangci-lint.run/welcome/install/"; \
-		exit 1; \
-	fi
-	@LINT_MAJOR=$$(golangci-lint version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 | cut -d. -f1); \
-	if [ "$$LINT_MAJOR" != "2" ]; then \
-		echo "Error: golangci-lint v2 is required (.golangci.yml declares version: \"2\"), but v$$LINT_MAJOR is installed."; \
-		echo "Upgrade: https://golangci-lint.run/welcome/install/"; \
-		exit 1; \
-	fi
 	golangci-lint run
 
 # Run full validation suite
@@ -101,9 +92,9 @@ deps-update:
 	go get -u ./...
 	go mod tidy
 
-# Run security scan (requires gosec)
+# Run security scan. Requires gosec on PATH:
+# go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
 security-scan:
-	@which gosec > /dev/null || (echo "gosec not installed. Run: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest" && exit 1)
 	gosec ./...
 
 # List all Go functions in the project

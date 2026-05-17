@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- `Makefile`: deferred `BUILD_TIME` and `GIT_COMMIT` evaluation (`:=` → `=`) so targets that never reference `LDFLAGS` (`fmt`, `vet`, `help`, `test`, ...) no longer shell out to `git rev-parse` and `date`.
+- `Makefile`: `build` target now emits `-o pulsar`, matching `build-release`.
+- `Makefile`: `lint` target no longer pre-checks the `golangci-lint` binary or parses its version output — `.golangci.yml`'s declared `version: "2"` fails loudly on the wrong binary on its own.
+- `Makefile`: `security-scan` target no longer pre-checks for `gosec`; install instructions moved to a comment.
+
 ### Added
 
 - Initial implementation of the `pulsar` binary with `publish`, `serve`, `install`, and `uninstall` subcommands.
