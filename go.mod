@@ -1,6 +1,6 @@
 module github.com/ArjenSchwarz/pulsar
 
-go 1.25.5
+go 1.25.0
 
 require (
 	github.com/gorilla/feeds v1.2.0

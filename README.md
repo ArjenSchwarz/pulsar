@@ -73,10 +73,12 @@ Schema and validation rules are documented in `docs/agent-contract.md`.
 ## Development
 
 ```sh
-go build ./...
-go test ./...
-go vet ./...
+make build      # build with version ldflags injected
+make test       # run tests
+make check      # fmt + vet + lint + test
 ```
+
+`make help` lists everything else (release builds, coverage, benchmarks, dependency updates).
 
 ## Tailscale Funnel
 
