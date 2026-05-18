@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `.github/workflows/push.yml`: CI workflow that runs `go test`, `golangci-lint`, and a build verification on every push (Go 1.25, ubuntu-latest).
+- `.github/workflows/release.yaml`: release workflow that builds binaries for `linux`, `darwin`, and `windows` on `amd64` and `arm64` whenever a GitHub release is published, with `main.Version` / `main.BuildTime` / `main.GitCommit` injected via `-ldflags`.
+- `README.md`: install section now points at the GitHub releases page in addition to `go install` / build-from-source, and calls out that `install` / `uninstall` are macOS-only.
 - `CLAUDE.md`: repo-root guide for Claude Code sessions, summarising build/test/lint commands (via the Makefile), the flat `package main` layout, per-file responsibilities, and load-bearing behaviours (PR pointer semantics, intentional GUID churn on republish, `rssFeedXML` workaround for `gorilla/feeds`, `serveArchiveFile` traversal/symlink protection, atomic same-directory writes).
 
 ### Changed

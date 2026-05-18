@@ -12,6 +12,10 @@ See `docs/pulsar-implementation-plan.md` for the full design and `docs/agent-con
 
 ## Install
 
+Download a pre-built binary from the [releases page](https://github.com/ArjenSchwarz/pulsar/releases). Archives are published for `linux`, `darwin`, and `windows` on both `amd64` and `arm64`. The `install` / `uninstall` subcommands only work on macOS (they manage a LaunchAgent), but the rest of the binary runs anywhere Go does.
+
+Or install from source:
+
 ```
 go install github.com/ArjenSchwarz/pulsar@latest
 ```
