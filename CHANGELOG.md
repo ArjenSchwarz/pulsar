@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `CLAUDE.md`: repo-root guide for Claude Code sessions, summarising build/test/lint commands (via the Makefile), the flat `package main` layout, per-file responsibilities, and load-bearing behaviours (PR pointer semantics, intentional GUID churn on republish, `rssFeedXML` workaround for `gorilla/feeds`, `serveArchiveFile` traversal/symlink protection, atomic same-directory writes).
+
 ### Changed
 
 - `Makefile`: deferred `BUILD_TIME` and `GIT_COMMIT` evaluation (`:=` → `=`) so targets that never reference `LDFLAGS` (`fmt`, `vet`, `help`, `test`, ...) no longer shell out to `git rev-parse` and `date`.
